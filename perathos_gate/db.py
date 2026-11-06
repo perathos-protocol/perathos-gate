@@ -26,6 +26,11 @@ def make_engine(url: str) -> Engine:
             cur.close()
 
         return engine
+    # PaaS providers hand out postgres:// or postgresql:// URLs; route them to psycopg 3.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix):]
+            break
     return create_engine(url, pool_pre_ping=True)
 
 
