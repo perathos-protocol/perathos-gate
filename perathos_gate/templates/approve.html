@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Approve action? - Perathos Gate{% endblock %}
+{% block body_attrs %}data-page="approve" data-id="{{ approval.id }}" data-status="{{ approval.status }}" data-expires="{{ expires_at }}"{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="eyebrow">{{ agent.name or "An agent" }} is asking for approval</p>
+  <h1>Approve this action?</h1>
+
+  <pre class="action" id="summary">{{ action.summary }}</pre>
+
+  <dl class="facts">
+    {% if action.tool %}<dt>Tool</dt><dd>{{ action.tool }}</dd>{% endif %}
+    {% if action.rule %}<dt>Rule</dt><dd>{{ action.rule }}</dd>{% endif %}
+    {% if action.target %}<dt>Target</dt><dd>{{ action.target }}</dd>{% endif %}
+    <dt>Agent</dt><dd>{{ agent.name or "unknown" }}{% if agent.host %} on {{ agent.host }}{% endif %}</dd>
+    {% if agent.session_id %}<dt>Session</dt><dd class="mono">{{ agent.session_id }}</dd>{% endif %}
+    <dt>Request</dt><dd class="mono">{{ approval.id }}</dd>
+    <dt>Time left</dt><dd id="time-left">{{ expires_at }}</dd>
+  </dl>
+
+  {% if action.detail %}
+  <details open><summary>Detail</summary><pre class="detail">{{ action.detail }}</pre></details>
+  {% endif %}
+
+  {% if approval.status == "pending" %}
+  <div class="buttons" id="buttons">
+    <button type="button" class="btn approve" data-decision="approve">Approve</button>
+    <button type="button" class="btn deny" data-decision="deny">Deny</button>
+  </div>
+  <p class="hint">You will be asked for your passkey (Face ID, fingerprint or PIN). Your signature covers this exact action and your choice.</p>
+  {% endif %}
+
+  <div id="result" class="result {{ approval.status }}" {% if approval.status == "pending" %}hidden{% endif %}>
+    {% if approval.status == "approved" %}<strong>Approved</strong>{% if approver_name %} by {{ approver_name }}{% endif %}{% if decided_at %} at {{ decided_at }}{% endif %}.
+    {% elif approval.status == "denied" %}<strong>Denied</strong>{% if approver_name %} by {{ approver_name }}{% endif %}{% if decided_at %} at {{ decided_at }}{% endif %}.
+    {% elif approval.status == "expired" %}<strong>Expired.</strong> This request can no longer be decided.
+    {% endif %}
+    {% if receipt_hash %}<div class="mono small">Receipt {{ receipt_hash }}</div>{% endif %}
+  </div>
+  <p id="error" class="error" hidden></p>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #14181f; --muted: #5b6573; --line: #e2e6ec;
+  --approve: #11823b; --approve-ink: #ffffff; --deny: #c4281c; --deny-ink: #ffffff; --code: #0f172a; --code-ink: #e8edf5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d1117; --card: #161b22; --ink: #e6edf3; --muted: #9aa5b1; --line: #2a313c; --code: #010409; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.bar { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+.brand { font-weight: 700; letter-spacing: .02em; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 16px; }
+h1 { font-size: 1.4rem; margin: .2rem 0 1rem; }
+.eyebrow { color: var(--muted); margin: 0; font-size: .9rem; }
+pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+.action { background: var(--code); color: var(--code-ink); padding: 14px; border-radius: 10px;
+  font: 15px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.detail { font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 16px 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; word-break: break-word; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.small { font-size: .8rem; color: var(--muted); word-break: break-all; margin-top: 6px; }
+details { margin: 8px 0 16px; }
+.buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.buttons .btn:only-child { grid-column: 1 / -1; }
+.btn { appearance: none; border: 0; border-radius: 12px; padding: 18px 12px; font-size: 1.15rem; font-weight: 700;
+  cursor: pointer; min-height: 60px; }
+.btn:disabled { opacity: .55; cursor: progress; }
+.btn.approve { background: var(--approve); color: var(--approve-ink); }
+.btn.deny { background: var(--deny); color: var(--deny-ink); }
+.hint { color: var(--muted); font-size: .9rem; }
+.result { margin-top: 16px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); }
+.result.approved { border-color: var(--approve); }
+.result.denied, .result.expired { border-color: var(--deny); }
+.error { color: var(--deny); font-weight: 600; }

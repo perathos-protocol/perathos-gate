@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}Perathos Gate{% endblock %}</title>
+<link rel="stylesheet" href="/static/gate.css">
+</head>
+<body {% block body_attrs %}{% endblock %}>
+<header class="bar"><span class="brand">Perathos Gate</span></header>
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+<script src="/static/gate.js"></script>
+</body>
+</html>

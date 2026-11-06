@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Set up your passkey - Perathos Gate{% endblock %}
+{% block body_attrs %}data-page="enroll"{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="eyebrow">{{ org_name }}</p>
+  <h1>Hi {{ name }}, set up your approval passkey</h1>
+  <p>AI agents in <strong>{{ org_name }}</strong> will ask you before doing anything irreversible.
+     You approve or deny with a passkey on this device (Face ID, fingerprint or PIN).
+     The passkey never leaves your device.</p>
+  <div class="buttons">
+    <button type="button" class="btn approve" id="enroll-btn">Create passkey</button>
+  </div>
+  <p class="hint">This link works once and expires at {{ expires_at }}.</p>
+  <div id="result" class="result approved" hidden></div>
+  <p id="error" class="error" hidden></p>
+</section>
+{% endblock %}
