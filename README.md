@@ -125,3 +125,11 @@ ruff check .
 
 `scripts/e2e_live.py` drives a running server over real HTTP with the same software
 authenticator: `python scripts/e2e_live.py --base http://127.0.0.1:8787 --org-key pgk_... --enroll-url <invite url>`.
+
+## Licence
+
+The Gate server is licensed under the GNU Affero General Public License v3.0 or later (see
+LICENSE): run it, change it, self-host it; if you offer a modified version as a service, publish
+your changes. The client library and verifier (`perathos` on PyPI) stay MIT, so receipts can be
+verified anywhere without licence concerns. Commercial licences and hosted Gate are available
+from hello@perathos.com.
