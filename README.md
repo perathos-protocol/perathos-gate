@@ -7,7 +7,7 @@ phone with a passkey** (WebAuthn, user verification required: Face ID, fingerpri
 Every decision produces a **receipt** that anyone can verify offline with
 `perathos.gate.verify_receipt`: the passkey signed a challenge derived from the exact request
 and the decision, and the Gate server signed the whole receipt with its Ed25519 key.
-Protocol: [`docs/specs/GATE_V1.md`](https://github.com/perathos-protocol/perathos/blob/feat/gate/docs/specs/GATE_V1.md).
+Protocol: [`docs/specs/GATE_V1.md`](https://github.com/perathos-protocol/perathos/blob/main/docs/specs/GATE_V1.md).
 Request building, the decision challenge, receipt construction and verification all come from
 `perathos.gate`; this server does not reimplement them.
 

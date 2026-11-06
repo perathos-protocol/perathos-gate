@@ -8,10 +8,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATABASE_URL=sqlite:////data/gate.db \
     GATE_TRUST_PROXY=1
 
-# git is needed to install the perathos dependency from its feat/gate branch
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY perathos_gate ./perathos_gate
