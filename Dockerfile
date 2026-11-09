@@ -15,7 +15,8 @@ RUN pip install --upgrade pip && pip install ".[postgres]"
 
 RUN useradd --create-home --uid 10001 gate && mkdir -p /data && chown gate:gate /data
 USER gate
-VOLUME ["/data"]
+# /data holds the SQLite file and key file for single-box installs; mount a volume there if you use them.
+# (No VOLUME instruction: some PaaS builders, e.g. Railway, reject it.)
 EXPOSE 8787
 
 # Prefer GATE_SIGNING_KEY (a 64-hex secret) on PaaS; otherwise mount /data and run `perathos-gate init` once.
