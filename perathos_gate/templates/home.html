@@ -4,8 +4,18 @@
 {% block content %}
 <section class="card">
   <h1>Approval notifications</h1>
-  <p>This device can show a notification when an agent in your organisation asks for approval.
+  <p id="home-intro">This device can show a notification when an agent in your organisation asks for approval.
      First confirm it is you with your approval passkey, then enable notifications.</p>
+  <div id="ios-steps" hidden>
+    <p><strong>On iPhone and iPad, notifications only work from the Home Screen.</strong> Do this once:</p>
+    <ol class="steps">
+      <li>Open this page in <strong>Safari</strong>.</li>
+      <li>Tap the <strong>Share</strong> button (a square with an arrow pointing up). On newer versions
+          it is behind the <strong>&hellip;</strong> button.</li>
+      <li>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+      <li>Open <strong>Perathos Gate</strong> from the new Home Screen icon and follow the steps there.</li>
+    </ol>
+  </div>
   <div class="buttons">
     <button type="button" class="btn approve" id="push-signin">Confirm with passkey</button>
   </div>

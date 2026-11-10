@@ -153,8 +153,16 @@
     var btn = $("push-signin");
     if (!pushSupported()) {
       btn.hidden = true;
-      $("push-note").textContent = NO_PUSH_HERE;
-      $("push").hidden = false;
+      // iPadOS reports itself as a Mac; a Mac with a touch screen is an iPad.
+      var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      if (ios && $("ios-steps")) {
+        $("home-intro").hidden = true;
+        $("ios-steps").hidden = false;
+      } else {
+        $("push-note").textContent = NO_PUSH_HERE;
+        $("push").hidden = false;
+      }
       return;
     }
     btn.addEventListener("click", async function () {

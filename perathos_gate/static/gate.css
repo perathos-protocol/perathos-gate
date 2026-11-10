@@ -37,3 +37,6 @@ details { margin: 8px 0 16px; }
 .result.approved { border-color: var(--approve); }
 .result.denied, .result.expired { border-color: var(--deny); }
 .error { color: var(--deny); font-weight: 600; }
+
+.steps { padding-left: 1.3rem; line-height: 1.6; }
+.steps li { margin-bottom: .4rem; }

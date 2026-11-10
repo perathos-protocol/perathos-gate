@@ -25,5 +25,8 @@
 
 ### Changed
 
+- The home page shows step-by-step "Add to Home Screen" instructions on iPhone and iPad in
+  Safari, where Web Push is unavailable until the site is opened from the Home Screen. Before,
+  it showed only a one-line note and nothing to tap.
 - The page CSP gains `worker-src 'self'` and `manifest-src 'self'`.
 - Approver rate limiting also covers `POST /push/*`.
