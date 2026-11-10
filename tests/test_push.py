@@ -264,7 +264,7 @@ def test_approval_pushes_to_every_device_in_the_org_only(push_gate, caplog):
     info, payload, ttl = gate.pushes[0]
     assert set(info["keys"]) == {"p256dh", "auth"} and 590 <= ttl <= 600
     message = json.loads(payload)
-    assert message["url"] == created["approve_url"] and message["tag"] == created["id"]
+    assert message["url"] == created["approve_url"] + "&via=push" and message["tag"] == created["id"]
     assert message["title"] == "claude-code is asking for approval"
     assert message["body"].startswith("railway volume delete pg-data --yes") and len(message["body"]) == 180
     by_endpoint = {r.endpoint: r for r in _rows(gate)}

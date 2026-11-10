@@ -98,7 +98,8 @@ def test_expired_request(gate):
     with gate.db.session() as s:
         s.execute(update(Approval).where(Approval.id == created["id"])
                   .values(expires_at=utcnow() - timedelta(seconds=1)))
-    assert gate.status(key, created["id"]).json() == {"id": created["id"], "status": "expired"}
+    assert gate.status(key, created["id"]).json() == {"id": created["id"], "status": "expired",
+                                                      "opened_via": [], "decided_via": None}
     assert gate.options(created, "approve").status_code == 409
     assert gate.verify(created, "approve", alice.assert_(opts)).status_code == 409
     path, t = gate.page_parts(created)
@@ -257,7 +258,47 @@ def test_webhook_fired(gate):
     created = gate.create(key)
     assert len(gate.webhooks) == 1
     url, req, approve_url = gate.webhooks[0]
-    assert url == "https://hooks.slack.com/services/T/B/X" and approve_url == created["approve_url"]
+    assert url == "https://hooks.slack.com/services/T/B/X" and approve_url == created["approve_url"] + "&via=webhook"
     from perathos_gate.notify import message_text
     assert message_text(req, approve_url) == (
         f"claude-code wants to railway volume delete pg-data --yes. Approve or deny: {approve_url}")
+
+
+def test_route_to_the_request_is_recorded(gate, caplog):
+    """Notification, QR code, webhook or plain link: the server notes which one was used."""
+    import logging
+
+    from perathos_gate.app import approval_routes
+    org_id, key = gate.org()
+    alice = gate.enrol(org_id)
+    created = gate.create(key)
+    path, t = gate.page_parts(created)
+    assert gate.status(key, created["id"]).json()["opened_via"] == []
+
+    with caplog.at_level(logging.INFO, logger="perathos_gate"):
+        assert 'data-via="link"' in gate.client.get(f"{path}?t={t}").text
+        assert 'data-via="qr"' in gate.client.get(f"{path}?t={t}&via=qr").text
+        gate.client.get(f"{path}?t={t}&via=qr")  # a reload is not listed twice
+        # An unknown route is recorded as a plain link, and is never echoed into the page.
+        page = gate.client.get(f"{path}?t={t}&via=%22%3E%3Cscript%3E")
+        assert 'data-via="link"' in page.text and "<script>\"" not in page.text
+    assert "opened via qr" in caplog.text and t not in caplog.text
+    # A wrong token records nothing.
+    assert gate.client.get(f"{path}?t=wrong&via=push").status_code == 404
+    st = gate.status(key, created["id"]).json()
+    assert st["opened_via"] == ["link", "qr"] and st["decided_via"] is None
+
+    opts = gate.options(created, "approve").json()
+    r = gate.client.post(path + "/verify", json={"t": t, "decision": "approve", "via": "qr",
+                                                 "credential": alice.assert_(opts)})
+    assert r.status_code == 200, r.text
+    st = gate.status(key, created["id"]).json()
+    assert st["status"] == "approved" and st["decided_via"] == "qr"
+    # The route is a browser-reported hint: it is not in the signed receipt.
+    assert "via" not in st["receipt"] and "opened_via" not in st["receipt"]
+    assert approval_routes(gate.db, [created["id"]])[created["id"]]["decided_via"] == "qr"
+
+    # A decision that sends no route, or a made-up one, counts as a plain link.
+    second = gate.create(key)
+    assert gate.decide(second, "deny", alice).status_code == 200
+    assert gate.status(key, second["id"]).json()["decided_via"] == "link"
