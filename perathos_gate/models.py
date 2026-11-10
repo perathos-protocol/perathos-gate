@@ -89,6 +89,20 @@ class Approval(Base):
     decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
+class ApprovalEvent(Base):
+    """How an approver reached a request: opened or decided, and by which route. Its own table:
+    nothing else in the schema refers to it. The route is reported by the approver's browser,
+    so it is a usage hint, not evidence, and it is not part of the signed receipt."""
+
+    __tablename__ = "approval_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    approval_id: Mapped[str] = mapped_column(ForeignKey("approvals.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # opened | decided
+    via: Mapped[str] = mapped_column(String(16))  # push | qr | webhook | link
+    at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class PushSubscription(Base):
     """One browser/device that asked for Web Push. Its own table: nothing else in the schema refers to it."""
 

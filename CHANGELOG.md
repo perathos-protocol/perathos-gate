@@ -4,6 +4,13 @@
 
 ### Added
 
+- The server records how each request was reached: notification, QR code, webhook message or
+  plain link. Notification and webhook links carry `&via=push` / `&via=webhook`; a client adds
+  `&via=qr` to the link it encodes as a QR code. The route is logged, shown by
+  `perathos-gate list-approvals`, and returned by `GET /v1/approvals/{id}` as `opened_via` and
+  `decided_via`. It is reported by the approver's browser, so it is a usage hint, not evidence,
+  and it is not part of the signed receipt. New table `approval_events`, created at startup; no
+  existing table or column changes.
 - Web Push notifications (RFC 8030 / 8291 / 8292, VAPID). When `GATE_VAPID_PRIVATE_KEY` is set,
   approvers can enable notifications on a device after a passkey ceremony, and each new approval
   request is pushed to every subscribed device of the organisation's active approvers. Off by

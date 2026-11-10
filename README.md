@@ -116,6 +116,15 @@ with a secret derived from the VAPID private key. It can do one thing: attach a 
 to that approver. The message itself is encrypted to the browser (RFC 8291), so the push service
 cannot read the summary or the approve link.
 
+### Which route was used
+
+The server notes how each request was reached. Notification links carry `&via=push`, webhook
+messages `&via=webhook`, and a client adds `&via=qr` to the link it draws as a QR code; anything
+else counts as a plain `link`. The route appears in the server log, in
+`perathos-gate list-approvals`, and in `GET /v1/approvals/{id}` as `opened_via` and
+`decided_via`. It is reported by the approver's browser and anyone holding the link can change
+it, so treat it as a usage statistic. It is not part of the signed receipt.
+
 ## Configuration
 
 | Variable | Default | Meaning |

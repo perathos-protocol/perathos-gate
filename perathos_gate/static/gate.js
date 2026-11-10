@@ -214,7 +214,7 @@
           };
           var cred = await navigator.credentials.get({ publicKey: publicKey });
           var res = await postJSON("/a/" + id + "/verify",
-            { t: t, decision: decision, credential: assertionJSON(cred) });
+            { t: t, decision: decision, credential: assertionJSON(cred), via: body.dataset.via });
           var out = $("result");
           out.className = "result " + res.status;
           out.textContent = (res.status === "approved" ? "Approved" : "Denied") + " by " + res.approver +

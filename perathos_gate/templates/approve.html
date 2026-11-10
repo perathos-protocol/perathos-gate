@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Approve action? - Perathos Gate{% endblock %}
-{% block body_attrs %}data-page="approve" data-id="{{ approval.id }}" data-status="{{ approval.status }}" data-expires="{{ expires_at }}"{% endblock %}
+{% block body_attrs %}data-page="approve" data-id="{{ approval.id }}" data-status="{{ approval.status }}" data-expires="{{ expires_at }}" data-via="{{ via }}"{% endblock %}
 {% block content %}
 <section class="card">
   <p class="eyebrow">{{ agent.name or "An agent" }} is asking for approval</p>

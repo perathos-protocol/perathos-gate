@@ -93,17 +93,20 @@ def cmd_vapid_keygen(args) -> int:
 
 
 def cmd_list_approvals(args) -> int:
-    from .app import admin_list_approvals
+    from .app import admin_list_approvals, approval_routes
 
     s = _settings()
-    rows = admin_list_approvals(_db(s), args.org, args.limit)
+    db = _db(s)
+    rows = admin_list_approvals(db, args.org, args.limit)
+    routes = approval_routes(db, [r.id for r in rows])
     if not rows:
         print("No approvals.")
         return 0
     for r in rows:
         summary = r.request.get("action", {}).get("summary", "")
         approver = ((r.receipt or {}).get("approver") or {}).get("name", "")
-        print(f"{r.id}  {r.status:<8}  {r.created_at:%Y-%m-%d %H:%M:%S}Z  {approver:<20}  {summary[:70]}")
+        via = routes[r.id]["decided_via"] or ",".join(routes[r.id]["opened_via"]) or "-"
+        print(f"{r.id}  {r.status:<8}  {r.created_at:%Y-%m-%d %H:%M:%S}Z  {approver:<20}  {via:<8}  {summary[:70]}")
     return 0
 
 

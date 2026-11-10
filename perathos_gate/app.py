@@ -33,7 +33,7 @@ from sqlalchemy import select, update
 from . import __version__, notify, push
 from .config import SPEC_VERSION, Settings
 from .db import Database
-from .models import Approval, Approver, EnrollToken, Org, utcnow
+from .models import Approval, ApprovalEvent, Approver, EnrollToken, Org, utcnow
 from .security import RateLimiter, SecurityMiddleware, new_token, sha256_hex, token_matches
 from .webauthn_flow import (
     WebAuthnError,
@@ -69,6 +69,41 @@ class DecisionBody(BaseModel):
     t: str = Field(max_length=200)
     decision: str
     credential: dict[str, Any] | None = None
+    via: str | None = Field(default=None, max_length=16)
+
+
+# Routes by which an approver can reach a request. Anything else counts as a plain link.
+VIA = ("push", "qr", "webhook", "link")
+
+
+def clean_via(via: str | None) -> str:
+    return via if via in VIA else "link"
+
+
+def record_event(db: Database, approval_id: str, kind: str, via: str | None) -> None:
+    """Note how a request was opened or decided. Never allowed to break the approval itself."""
+    try:
+        with db.session() as s:
+            s.add(ApprovalEvent(approval_id=approval_id, kind=kind, via=clean_via(via)))
+    except Exception:
+        log.exception("could not record %s event for %s", kind, approval_id)
+
+
+def approval_routes(db: Database, approval_ids: list[str]) -> dict[str, dict]:
+    """Per approval: the routes it was opened by (in order, no repeats) and the route it was decided by."""
+    out: dict[str, dict] = {i: {"opened_via": [], "decided_via": None} for i in approval_ids}
+    if not approval_ids:
+        return out
+    with db.session() as s:
+        rows = s.scalars(select(ApprovalEvent).where(ApprovalEvent.approval_id.in_(approval_ids))
+                         .order_by(ApprovalEvent.id)).all()
+    for r in rows:
+        entry = out[r.approval_id]
+        if r.kind == "decided":
+            entry["decided_via"] = r.via
+        elif r.via not in entry["opened_via"]:
+            entry["opened_via"].append(r.via)
+    return out
 
 
 class EnrollVerifyBody(BaseModel):
@@ -112,10 +147,12 @@ def _expire_if_due(db: Database, approval: Approval) -> Approval:
     return approval
 
 
-def _status_payload(approval: Approval) -> dict:
+def _status_payload(approval: Approval, routes: dict | None = None) -> dict:
     out: dict[str, Any] = {"id": approval.id, "status": approval.status}
     if approval.receipt is not None:
         out["receipt"] = approval.receipt
+    if routes:
+        out.update(routes)  # outside the receipt: reported by the browser, not signed
     return out
 
 
@@ -198,12 +235,12 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             s.add(approval)
         approve_url = f"{settings.origin}/a/{approval.id}?t={token}"
         try:
-            app.state.notifier(org.notify_webhook_url, req, approve_url)
+            app.state.notifier(org.notify_webhook_url, req, approve_url + "&via=webhook")
         except Exception:  # never let notification break the API
             log.exception("notification failed for %s", approval.id)
         if vapid and app.state.pusher:
             try:
-                push.notify_approval(db, app.state.pusher, org.id, req, approve_url,
+                push.notify_approval(db, app.state.pusher, org.id, req, approve_url + "&via=push",
                                      ttl=int((approval.expires_at - utcnow()).total_seconds()))
             except Exception:  # same rule as the webhook
                 log.exception("push notification failed for %s", approval.id)
@@ -228,19 +265,23 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             approval = await run_in_threadpool(_read_status, org.id, approval_id)
             if approval is None:  # pragma: no cover - deleted underneath us
                 raise HTTPException(404, "not found")
-        return _status_payload(approval)
+        routes = await run_in_threadpool(approval_routes, db, [approval.id])
+        return _status_payload(approval, routes[approval.id])
 
     # -------------------------------------------------------- approver pages
 
     @app.get("/a/{approval_id}", response_class=HTMLResponse)
-    def approver_page(request: Request, approval_id: str, t: str | None = None):
+    def approver_page(request: Request, approval_id: str, t: str | None = None, via: str | None = None):
         try:
             approval = load_for_approver(approval_id, t)
         except HTTPException:
             return message_page(request, "Link not valid", "This approval link is not valid.", 404)
+        via = clean_via(via)
+        record_event(db, approval.id, "opened", via)
+        log.info("approval %s opened via %s", approval.id, via)
         req = approval.request
         receipt = approval.receipt or {}
-        return page(request, "approve.html", approval=approval, req=req, action=req.get("action", {}),
+        return page(request, "approve.html", approval=approval, req=req, action=req.get("action", {}), via=via,
                     agent=req.get("agent", {}), expires_at=_iso(approval.expires_at),
                     approver_name=(receipt.get("approver") or {}).get("name"),
                     decided_at=receipt.get("decided_at"), receipt_hash=receipt.get("receipt_hash"))
@@ -324,7 +365,8 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             if result.rowcount != 1:
                 raise HTTPException(409, "this request is no longer pending")
             s.execute(update(Approver).where(Approver.id == approver.id).values(sign_count=new_count))
-        log.info("approval %s %s by approver #%s", approval.id, status, approver.id)
+        record_event(db, approval.id, "decided", body.via)
+        log.info("approval %s %s by approver #%s via %s", approval.id, status, approver.id, clean_via(body.via))
         return {"id": approval.id, "status": status, "decision": body.decision, "approver": approver.name,
                 "receipt_hash": receipt["receipt_hash"], **push_offer(approver.id)}
 
