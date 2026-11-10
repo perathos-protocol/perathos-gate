@@ -386,6 +386,19 @@ def admin_create_org(db: Database, name: str, webhook: str | None = None) -> tup
     return org_id, key
 
 
+def admin_rotate_key(db: Database, org_id: str) -> str:
+    """Replace an organisation's API key; returns the new key once. The old key stops working at once."""
+    from .security import new_api_key
+
+    key = new_api_key()
+    with db.session() as s:
+        org = s.get(Org, org_id)
+        if org is None:
+            raise ValueError(f"unknown org {org_id}")
+        org.api_key_hash = sha256_hex(key)
+    return key
+
+
 def admin_invite(db: Database, settings: Settings, org_id: str, name: str, *, hours: int = 24) -> str:
     """Create a single-use enrolment link valid for `hours`."""
     with db.session() as s:
