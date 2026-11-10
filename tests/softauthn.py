@@ -73,7 +73,8 @@ class SoftAuthenticator:
     def assert_(self, options: dict, *, flags: int = FLAG_UP | FLAG_UV, origin: str | None = None,
                 challenge_override: str | None = None) -> dict:
         allowed = {c["id"] for c in options.get("allowCredentials", [])}
-        assert b64url(self.credential_id) in allowed, "credential not offered by the server"
+        # an empty list means "any discoverable passkey for this RP"
+        assert not allowed or b64url(self.credential_id) in allowed, "credential not offered by the server"
         self.sign_count += 1
         client_data = self._client_data("webauthn.get", challenge_override or options["challenge"], origin)
         auth_data = self._rp_hash() + bytes([flags]) + struct.pack(">I", self.sign_count)

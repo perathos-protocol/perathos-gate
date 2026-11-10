@@ -1,4 +1,4 @@
-"""ORM models: organisations, approvers (passkeys), enrolment tokens and approval requests."""
+"""ORM models: organisations, approvers (passkeys), enrolment tokens, approval requests and push subscriptions."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -87,3 +87,21 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
     decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class PushSubscription(Base):
+    """One browser/device that asked for Web Push. Its own table: nothing else in the schema refers to it."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    approver_id: Mapped[int] = mapped_column(ForeignKey("approvers.id"), index=True)
+    org_id: Mapped[str] = mapped_column(ForeignKey("orgs.id"), index=True)
+    # The push service URL for this device. A capability: never logged in full.
+    endpoint: Mapped[str] = mapped_column(Text)
+    endpoint_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    p256dh: Mapped[str] = mapped_column(String(128))
+    auth: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_success_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

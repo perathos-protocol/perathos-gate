@@ -1,4 +1,4 @@
-"""`perathos-gate` command line: init, create-org, rotate-key, invite, serve, list-approvals."""
+"""`perathos-gate` command line: init, create-org, rotate-key, invite, vapid-keygen, serve, list-approvals."""
 from __future__ import annotations
 
 import argparse
@@ -79,6 +79,19 @@ def cmd_invite(args) -> int:
     return 0
 
 
+def cmd_vapid_keygen(args) -> int:
+    from .push import generate_vapid_keys
+
+    private, public = generate_vapid_keys()
+    print("New VAPID key pair for Web Push. Put these in the server's environment:")
+    print(f"GATE_VAPID_PRIVATE_KEY={private}")
+    print("GATE_VAPID_SUBJECT=mailto:you@example.com   <- a contact the push services can reach")
+    print(f"Public key (derived from the private key at startup; for reference): {public}")
+    print("The private key is shown only now and is not stored anywhere. Keep it secret. Replacing it")
+    print("later invalidates every existing notification subscription.")
+    return 0
+
+
 def cmd_list_approvals(args) -> int:
     from .app import admin_list_approvals
 
@@ -133,6 +146,9 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("--name", required=True)
     i.add_argument("--hours", type=int, default=24)
     i.set_defaults(func=cmd_invite)
+
+    vk = sub.add_parser("vapid-keygen", help="print a new VAPID key pair for Web Push notifications")
+    vk.set_defaults(func=cmd_vapid_keygen)
 
     sv = sub.add_parser("serve", help="run the HTTP server")
     sv.add_argument("--host", default="127.0.0.1")

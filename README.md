@@ -46,6 +46,76 @@ server behind HTTPS (a deployed instance, or a tunnel such as `cloudflared` / `n
 `GATE_RP_ID` / `GATE_ORIGIN` to that host name. The RP id is baked into each passkey: passkeys
 enrolled under one host name do not work under another.
 
+## Notifications
+
+An approver has to learn that a request is waiting. The Gate can tell them in two ways; both are
+optional, both run in a background thread, and neither can delay or fail the agent's API call.
+**The approve link (`approve_url` in the API response) always works**, so an agent or a person can
+still pass it on, or show it as a QR code, when a notification does not arrive.
+
+### Webhook
+
+`create-org --webhook URL` stores a Slack-compatible incoming webhook. Each new request posts
+`{"text": "<agent> wants to <summary>. Approve or deny: <approve_url>"}` to it. Anyone who can read
+that channel can open the request; deciding still needs an enrolled passkey.
+
+### Web Push (browser notifications)
+
+With a VAPID key configured, approvers can turn on notifications for a browser or phone. A new
+request then shows a system notification with the agent name and the action summary; tapping it
+opens the approve page.
+
+Set up (operator):
+
+```bash
+perathos-gate vapid-keygen
+#   GATE_VAPID_PRIVATE_KEY=...    <- printed once, not stored; keep it secret
+#   GATE_VAPID_SUBJECT=mailto:you@example.com
+```
+
+Put both variables in the server's environment and restart. `GATE_VAPID_SUBJECT` must be a
+`mailto:` or `https:` contact for the push services; if it is unset the Gate uses `GATE_ORIGIN`
+when that is https. Without `GATE_VAPID_PRIVATE_KEY` push is off: no button, no extra routes, and
+everything else behaves as before. A malformed key logs an error and leaves push off; it does not
+stop the server. Replacing the key invalidates every existing subscription (approvers enable
+notifications again).
+
+Turning it on (approver): after creating a passkey, or after approving or denying a request, the
+page shows **Enable notifications on this device**. The same button is on the Gate's home page
+(`/`) behind **Confirm with passkey**. **Turn off notifications on this device** removes the
+subscription from the browser and the server.
+
+What to expect, plainly:
+
+* **iPhone and iPad: Web Push only works after the site is added to the Home Screen**, on iOS /
+  iPadOS 16.4 or later. In Safari: Share, Add to Home Screen, open the Gate from that icon, press
+  **Confirm with passkey**, then **Enable notifications on this device**. A Safari tab on iOS
+  cannot receive push at all. The passkey prompt on the home page needs a passkey the device can
+  find by itself (a discoverable credential); iCloud Keychain passkeys are.
+* Android (Chrome, Firefox, Edge, Samsung Internet) and desktop browsers can enable it from a
+  normal tab. Desktop browsers usually only show notifications while the browser is running.
+* **Delivery is best effort.** Messages travel through the browser vendor's push service (Google
+  FCM, Mozilla, Apple, Microsoft). The Gate hands the message over and learns only whether it was
+  accepted, not whether or when the device showed it. Battery savers, focus modes, revoked
+  permission or an offline device can delay or drop a notification. A message that is not
+  delivered before the request expires is discarded by the push service.
+* A notification is a pointer, not an approval. Nothing is approved until someone opens the page
+  and signs with their passkey.
+* A subscription the push service reports as gone (HTTP 404 or 410) is deleted. Other failures are
+  recorded on the subscription (`last_failure_at`); a failed message is not retried.
+* What has been tested: the send path is unit-tested against a local stand-in push service
+  (encryption and VAPID header), and the whole flow (enable, receive, show, turn off) was run once
+  by hand in headless Chrome on Windows against Google's push service. There is no automated
+  browser test, and it has not been tried on iOS, Android, Firefox or Safari. Try it on your own
+  devices before relying on it.
+
+How a device is tied to an approver: a browser may subscribe only with a token that the server
+issues in the response to a verified passkey ceremony (enrolment, a decision, or the home-page
+confirmation). The token is an HMAC over the approver id and an expiry ten minutes ahead, keyed
+with a secret derived from the VAPID private key. It can do one thing: attach a push subscription
+to that approver. The message itself is encrypted to the browser (RFC 8291), so the push service
+cannot read the summary or the approve link.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -59,6 +129,8 @@ enrolled under one host name do not work under another.
 | `DATABASE_URL` | `sqlite:///./data/gate.db` | SQLite, or Postgres (`postgres://`/`postgresql://` URLs are accepted) |
 | `GATE_TRUST_PROXY` | `0` | `1` behind a reverse proxy: use `X-Forwarded-For` for rate limiting |
 | `GATE_RATE_LIMIT_PER_MIN` | `30` | Approver POSTs per IP per minute on `/a/*` and `/enroll/*` |
+| `GATE_VAPID_PRIVATE_KEY` | (unset) | Web Push key from `perathos-gate vapid-keygen`; unset means push is off |
+| `GATE_VAPID_SUBJECT` | `GATE_ORIGIN` if https | `mailto:` or `https:` contact sent to push services |
 | `PORT` | `8787` | Default port for `serve` |
 
 See `.env.example`.
@@ -70,6 +142,7 @@ See `.env.example`.
 | `perathos-gate init` | Creates the data dir, tables and server key; prints the verify key to pin in clients |
 | `perathos-gate create-org NAME [--webhook URL]` | Prints the org id and API key (once) |
 | `perathos-gate invite --org ID --name "Alice Moyo" [--hours 24]` | Prints a single-use enrolment URL |
+| `perathos-gate vapid-keygen` | Prints a new VAPID key pair for Web Push (private key shown once) |
 | `perathos-gate serve [--host 127.0.0.1] [--port 8787]` | Runs the server |
 | `perathos-gate list-approvals --org ID [--limit 50]` | Recent approvals and their status |
 
@@ -83,6 +156,8 @@ The `Dockerfile` builds a `python:3.11-slim` image that runs as a non-root user 
   `python -c "import secrets; print(secrets.token_hex(32))"` and keep it as a secret), and
   `DATABASE_URL` pointing at a managed Postgres. `GATE_TRUST_PROXY=1` is the image default.
   Then run `perathos-gate create-org` / `invite` in a one-off shell on the service (same env).
+* Tables are created at startup with SQLAlchemy `create_all`, which only adds tables that do not
+  exist yet and never alters existing ones. There is no migration tool.
 * **SQLite** works for a single instance with a persistent volume mounted at `/data`.
 * Long-polling reads the database every 0.5 s, so several instances behind a load balancer share
   state correctly with Postgres. The rate limiter is per process.
@@ -110,6 +185,12 @@ The `Dockerfile` builds a `python:3.11-slim` image that runs as a non-root user 
 * Request bodies over 64 KB are rejected (413). Approver POSTs are rate-limited per IP (429).
 * The access log records method, path and status only: no query strings (approve tokens), no
   enrolment tokens, no API keys, and webhook failures log only the host.
+* Web Push: a device can be attached to an approver only with a short-lived token issued after
+  that approver's passkey was verified. Push endpoints must be https URLs on a host name (no IP
+  literals, no `localhost`), redirects are not followed, and logs name the push host only. A
+  notification carries the approve link, so whoever holds an approver's unlocked device can view
+  the request, exactly as with the link itself. The server does POST to an endpoint URL chosen by
+  the approver's browser; only enrolled approvers can register one.
 * The approve link is a bearer capability for *viewing* a request and starting the ceremony;
   deciding still requires an enrolled passkey of the same organisation.
 * Enrolment links are single-use and expire in 24 hours; deliver them out of band. Anyone who
