@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import secrets
@@ -12,7 +13,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from perathos.gate import (
@@ -29,7 +30,7 @@ from perathos.gate import (
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
-from . import __version__, notify
+from . import __version__, notify, push
 from .config import SPEC_VERSION, Settings
 from .db import Database
 from .models import Approval, Approver, EnrollToken, Org, utcnow
@@ -72,6 +73,15 @@ class DecisionBody(BaseModel):
 
 class EnrollVerifyBody(BaseModel):
     credential: dict[str, Any]
+
+
+class PushSubscribeBody(BaseModel):
+    token: str = Field(max_length=200)
+    subscription: dict[str, Any]
+
+
+class PushUnsubscribeBody(BaseModel):
+    endpoint: str = Field(max_length=push.MAX_ENDPOINT_LEN)
 
 
 # --------------------------------------------------------------------------- #
@@ -121,14 +131,17 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
     app.state.db = db
     app.state.verify_key = verify_key
     app.state.notifier = notify.send_webhook
+    # Web Push is optional: without a VAPID key there is no pusher, no push routes and no button.
+    vapid = push.load_vapid(settings)
+    app.state.pusher = push.make_sender(vapid) if vapid else None
     app.add_middleware(SecurityMiddleware, max_body_bytes=settings.max_body_bytes,
                        limiter=RateLimiter(settings.rate_limit_per_min), trust_proxy=settings.trust_proxy)
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(HERE / "templates"))
 
     def page(request: Request, template: str, status_code: int = 200, **ctx) -> HTMLResponse:
-        return templates.TemplateResponse(request, template, {"origin": settings.origin, **ctx},
-                                          status_code=status_code)
+        base = {"origin": settings.origin, "vapid_public_key": vapid.public_key if vapid else None}
+        return templates.TemplateResponse(request, template, {**base, **ctx}, status_code=status_code)
 
     def message_page(request: Request, title: str, text: str, status_code: int) -> HTMLResponse:
         return page(request, "message.html", status_code, title=title, text=text)
@@ -188,6 +201,12 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             app.state.notifier(org.notify_webhook_url, req, approve_url)
         except Exception:  # never let notification break the API
             log.exception("notification failed for %s", approval.id)
+        if vapid and app.state.pusher:
+            try:
+                push.notify_approval(db, app.state.pusher, org.id, req, approve_url,
+                                     ttl=int((approval.expires_at - utcnow()).total_seconds()))
+            except Exception:  # same rule as the webhook
+                log.exception("push notification failed for %s", approval.id)
         return {"id": approval.id, "status": "pending", "request": req, "approve_url": approve_url,
                 "expires_at": req["expires_at"]}
 
@@ -225,6 +244,11 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                     agent=req.get("agent", {}), expires_at=_iso(approval.expires_at),
                     approver_name=(receipt.get("approver") or {}).get("name"),
                     decided_at=receipt.get("decided_at"), receipt_hash=receipt.get("receipt_hash"))
+
+    def push_offer(approver_id: int) -> dict:
+        """Extra field for a response that follows a verified passkey ceremony: a short-lived token
+        that lets this browser attach itself to that approver for notifications."""
+        return {"push_token": push.issue_token(vapid.secret, approver_id)} if vapid else {}
 
     def _assert_decidable(approval: Approval, decision: str) -> None:
         if decision not in DECISIONS:
@@ -302,7 +326,80 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             s.execute(update(Approver).where(Approver.id == approver.id).values(sign_count=new_count))
         log.info("approval %s %s by approver #%s", approval.id, status, approver.id)
         return {"id": approval.id, "status": status, "decision": body.decision, "approver": approver.name,
-                "receipt_hash": receipt["receipt_hash"]}
+                "receipt_hash": receipt["receipt_hash"], **push_offer(approver.id)}
+
+    # ------------------------------------------------------- push notifications
+
+    def register_push_routes() -> None:
+        @app.get("/", response_class=HTMLResponse)
+        def home(request: Request):
+            # Where the Home Screen app opens (iOS only delivers Web Push to a Home Screen app).
+            return page(request, "home.html")
+
+        @app.get("/sw.js")
+        def service_worker():
+            # Served from the root so its scope is the whole origin.
+            return FileResponse(HERE / "static" / "sw.js", media_type="text/javascript")
+
+        @app.get("/manifest.webmanifest")
+        def manifest():
+            return JSONResponse({"name": settings.rp_name, "short_name": "Gate", "start_url": "/", "scope": "/",
+                                 "display": "standalone", "background_color": "#f6f7f9", "theme_color": "#14181f"},
+                                media_type="application/manifest+json")
+
+        @app.post("/push/options")
+        def push_options() -> dict:
+            """Start the confirm-with-passkey step: any discoverable passkey of this Gate may answer."""
+            return authentication_options(settings, challenge=push.new_challenge(vapid.secret), credential_ids=[])
+
+        @app.post("/push/verify")
+        def push_verify(body: EnrollVerifyBody) -> dict:
+            cred = body.credential
+            try:
+                raw_id = b64url_decode(str(cred.get("rawId") or cred.get("id") or ""))
+                client_data = json.loads(b64url_decode(cred["response"]["clientDataJSON"]))
+                challenge = b64url_decode(client_data["challenge"])
+            except (KeyError, TypeError, ValueError, AttributeError) as exc:
+                raise HTTPException(400, "malformed credential") from exc
+            if not push.challenge_valid(vapid.secret, challenge):
+                raise HTTPException(400, "passkey verification failed")
+            with db.session() as s:
+                approver = s.scalars(select(Approver).where(Approver.credential_id == raw_id,
+                                                            Approver.active.is_(True))).first()
+            if approver is None:
+                raise HTTPException(400, "this passkey is not enrolled as an approver")
+            try:
+                new_count = verify_assertion(settings, cred, challenge=challenge,
+                                             public_key_cose=approver.public_key_cose,
+                                             sign_count=approver.sign_count)
+            except WebAuthnError as exc:
+                log.info("push sign-in rejected: %s", exc)
+                raise HTTPException(400, "passkey verification failed") from exc
+            with db.session() as s:
+                s.execute(update(Approver).where(Approver.id == approver.id).values(sign_count=new_count))
+            return {"ok": True, "approver": approver.name, **push_offer(approver.id)}
+
+        @app.post("/push/subscribe")
+        def push_subscribe(body: PushSubscribeBody) -> dict:
+            approver_id = push.check_token(vapid.secret, body.token)
+            if approver_id is None:
+                raise HTTPException(403, "confirm with your passkey again, then enable notifications")
+            try:
+                endpoint, p256dh, auth = push.parse_subscription(body.subscription)
+            except ValueError as exc:
+                raise HTTPException(422, "malformed push subscription") from exc
+            with db.session() as s:
+                approver = s.get(Approver, approver_id)
+            if approver is None or not approver.active:
+                raise HTTPException(403, "this approver is no longer active")
+            push.save_subscription(db, approver, endpoint, p256dh, auth)
+            log.info("push subscription saved for approver #%s at %s", approver.id, push.endpoint_host(endpoint))
+            return {"ok": True}
+
+        @app.post("/push/unsubscribe")
+        def push_unsubscribe(body: PushUnsubscribeBody) -> dict:
+            # The endpoint URL is known only to that browser and this server, so presenting it is enough.
+            return {"ok": True, "removed": push.delete_subscription(db, body.endpoint)}
 
     # --------------------------------------------------------------- enrolment
 
@@ -363,7 +460,10 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             s.add(approver)
         log.info("approver enrolled for org %s", row.org_id)
         return {"ok": True, "approver": row.approver_name, "credential_id": b64url(reg.credential_id),
-                "alg": reg.alg}
+                "alg": reg.alg, **push_offer(approver.id)}
+
+    if vapid:
+        register_push_routes()
 
     return app
 

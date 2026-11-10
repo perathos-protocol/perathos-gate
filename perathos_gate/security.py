@@ -71,7 +71,8 @@ class RateLimiter:
 # --------------------------------------------------------------------------- #
 
 HTML_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+            "connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; "
+            "frame-ancestors 'none'")
 
 _COMMON_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
@@ -145,7 +146,7 @@ class SecurityMiddleware:
                         status_holder["status"] = 413
                         return await self._reply(send, 413, "request body too large")
 
-            approver_post = method == "POST" and (path.startswith("/a/") or path.startswith("/enroll/"))
+            approver_post = method == "POST" and path.startswith(("/a/", "/enroll/", "/push/"))
             if approver_post and not self.limiter.allow(self._client_ip(scope)):
                 status_holder["status"] = 429
                 return await self._reply(send, 429, "too many requests")

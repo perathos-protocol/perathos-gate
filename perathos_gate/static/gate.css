@@ -31,6 +31,7 @@ details { margin: 8px 0 16px; }
 .btn:disabled { opacity: .55; cursor: progress; }
 .btn.approve { background: var(--approve); color: var(--approve-ink); }
 .btn.deny { background: var(--deny); color: var(--deny-ink); }
+.btn.plain { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
 .hint { color: var(--muted); font-size: .9rem; }
 .result { margin-top: 16px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); }
 .result.approved { border-color: var(--approve); }

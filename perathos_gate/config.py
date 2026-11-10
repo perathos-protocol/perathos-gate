@@ -39,6 +39,8 @@ class Settings:
     rate_limit_per_min: int = 30
     max_body_bytes: int = 64 * 1024
     receipt_valid_seconds: int = 600
+    vapid_private_key: str | None = None
+    vapid_subject: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -53,6 +55,8 @@ class Settings:
             signing_key_hex=os.environ.get("GATE_SIGNING_KEY", "").strip().lower() or None,
             trust_proxy=_env("GATE_TRUST_PROXY", "0").lower() in ("1", "true", "yes"),
             rate_limit_per_min=int(_env("GATE_RATE_LIMIT_PER_MIN", "30")),
+            vapid_private_key=os.environ.get("GATE_VAPID_PRIVATE_KEY", "").strip() or None,
+            vapid_subject=os.environ.get("GATE_VAPID_SUBJECT", "").strip() or None,
         )
 
     def load_signer(self) -> LocalSigner:

@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>{% block title %}Perathos Gate{% endblock %}</title>
 <link rel="stylesheet" href="/static/gate.css">
+{% if vapid_public_key %}<link rel="manifest" href="/manifest.webmanifest">{% endif %}
 </head>
 <body {% block body_attrs %}{% endblock %}>
 <header class="bar"><span class="brand">Perathos Gate</span></header>

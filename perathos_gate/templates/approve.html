@@ -37,6 +37,7 @@
     {% endif %}
     {% if receipt_hash %}<div class="mono small">Receipt {{ receipt_hash }}</div>{% endif %}
   </div>
+  {% include "_push.html" %}
   <p id="error" class="error" hidden></p>
 </section>
 {% endblock %}

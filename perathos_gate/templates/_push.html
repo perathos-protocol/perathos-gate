@@ -1,0 +1,9 @@
+{% if vapid_public_key %}
+<div id="push" class="push" data-vapid-key="{{ vapid_public_key }}" hidden>
+  <div class="buttons">
+    <button type="button" class="btn plain" id="push-on" hidden>Enable notifications on this device</button>
+    <button type="button" class="btn plain" id="push-off" hidden>Turn off notifications on this device</button>
+  </div>
+  <p class="hint" id="push-note"></p>
+</div>
+{% endif %}

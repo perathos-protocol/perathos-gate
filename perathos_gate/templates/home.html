@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Notifications - Perathos Gate{% endblock %}
+{% block body_attrs %}data-page="home"{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Approval notifications</h1>
+  <p>This device can show a notification when an agent in your organisation asks for approval.
+     First confirm it is you with your approval passkey, then enable notifications.</p>
+  <div class="buttons">
+    <button type="button" class="btn approve" id="push-signin">Confirm with passkey</button>
+  </div>
+  <div id="result" class="result approved" hidden></div>
+  {% include "_push.html" %}
+  <p class="hint">Notifications are best effort. If one does not arrive, use the approval link you were sent.</p>
+  <p id="error" class="error" hidden></p>
+</section>
+{% endblock %}

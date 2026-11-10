@@ -13,6 +13,7 @@
   </div>
   <p class="hint">This link works once and expires at {{ expires_at }}.</p>
   <div id="result" class="result approved" hidden></div>
+  {% include "_push.html" %}
   <p id="error" class="error" hidden></p>
 </section>
 {% endblock %}

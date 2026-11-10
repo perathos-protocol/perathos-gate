@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from softauthn import SoftAuthenticator  # noqa: E402
 from perathos_gate.app import admin_create_org, admin_invite, create_app  # noqa: E402
 from perathos_gate.config import Settings  # noqa: E402
 from perathos_gate.db import Database  # noqa: E402
+from perathos_gate.push import generate_vapid_keys  # noqa: E402
 
 RP_ID = "localhost"
 ORIGIN = "http://localhost:8787"
@@ -28,6 +30,23 @@ class Gate:
     db: Database
     verify_key: str
     webhooks: list = field(default_factory=list)
+    # Web Push: every (subscription, payload, ttl) the fake sender saw, and what it answers per endpoint
+    # (an HTTP status, or an exception to raise). Default 201.
+    pushes: list = field(default_factory=list)
+    push_answers: dict = field(default_factory=dict)
+
+    def fake_push(self, subscription: dict, payload: str, ttl: int) -> int:
+        self.pushes.append((subscription, payload, ttl))
+        answer = self.push_answers.get(subscription["endpoint"], 201)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    @staticmethod
+    def wait_push() -> None:
+        for t in threading.enumerate():
+            if t.name == "gate-push":
+                t.join(5)
 
     # ------------------------------------------------------------ admin
 
@@ -103,6 +122,8 @@ def make_gate(tmp_path):
         app = create_app(settings, database=db)
         gate = Gate(client=None, settings=settings, db=db, verify_key=app.state.verify_key)  # type: ignore[arg-type]
         app.state.notifier = lambda url, req, approve_url: gate.webhooks.append((url, req, approve_url))
+        if app.state.pusher is not None:  # only when the test configured a VAPID key
+            app.state.pusher = gate.fake_push
         client = TestClient(app)
         client.__enter__()
         clients.append(client)
@@ -117,3 +138,9 @@ def make_gate(tmp_path):
 @pytest.fixture
 def gate(make_gate) -> Gate:
     return make_gate()
+
+
+@pytest.fixture
+def push_gate(make_gate) -> Gate:
+    """A gate with Web Push configured and the sender replaced by Gate.fake_push."""
+    return make_gate(vapid_private_key=generate_vapid_keys()[0], vapid_subject="mailto:ops@example.com")
