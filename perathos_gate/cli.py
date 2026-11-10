@@ -1,4 +1,4 @@
-"""`perathos-gate` command line: init, create-org, invite, serve, list-approvals."""
+"""`perathos-gate` command line: init, create-org, rotate-key, invite, serve, list-approvals."""
 from __future__ import annotations
 
 import argparse
@@ -46,6 +46,21 @@ def cmd_create_org(args) -> int:
     print(f"Org id:  {org_id}")
     print(f"API key: {key}")
     print("Store the API key now: it is shown only once (the server keeps only its SHA-256).")
+    return 0
+
+
+def cmd_rotate_key(args) -> int:
+    from .app import admin_rotate_key
+
+    s = _settings()
+    try:
+        key = admin_rotate_key(_db(s), args.org)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Org id:  {args.org}")
+    print(f"API key: {key}")
+    print("The previous key no longer works. Store this one now: it is shown only once.")
     return 0
 
 
@@ -108,6 +123,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("name")
     c.add_argument("--webhook", help="Slack-compatible incoming webhook URL for notifications")
     c.set_defaults(func=cmd_create_org)
+
+    rk = sub.add_parser("rotate-key", help="replace an organisation's API key and print the new one once")
+    rk.add_argument("--org", required=True)
+    rk.set_defaults(func=cmd_rotate_key)
 
     i = sub.add_parser("invite", help="print a single-use passkey enrolment link for an approver")
     i.add_argument("--org", required=True)

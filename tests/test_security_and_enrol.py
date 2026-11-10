@@ -120,3 +120,25 @@ def test_cli_end_to_end(tmp_path, monkeypatch, capsys):
     assert cli_main(["invite", "--org", "org_missing", "--name", "x"]) == 1
     assert cli_main(["list-approvals", "--org", org_id]) == 0
     assert "No approvals." in capsys.readouterr().out
+
+
+def test_rotate_key_invalidates_old_key(gate):
+    from perathos_gate.app import admin_rotate_key
+
+    org_id, old_key = gate.org("Rotate Co")
+    new_key = admin_rotate_key(gate.db, org_id)
+    assert new_key != old_key
+    body = {"action": {"tool": "Bash", "summary": "x"}, "agent": {"name": "t"}, "args_hash": "a" * 64}
+    r_old = gate.client.post("/v1/approvals", json=body, headers={"Authorization": f"Bearer {old_key}"})
+    r_new = gate.client.post("/v1/approvals", json=body, headers={"Authorization": f"Bearer {new_key}"})
+    assert r_old.status_code == 401
+    assert r_new.status_code == 201
+
+
+def test_rotate_key_unknown_org(gate):
+    import pytest
+
+    from perathos_gate.app import admin_rotate_key
+
+    with pytest.raises(ValueError):
+        admin_rotate_key(gate.db, "org_nope")
